@@ -1,0 +1,60 @@
+terraform {
+  required_version = ">= 0.14.0"
+  required_providers {
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = "1.49.0"
+    }
+  }
+}
+
+
+provider "openstack" {
+  user_name   = "admin"
+  tenant_name = "admin"
+  password    = "x"
+  auth_url    = "http://192.168.10.208:5000/v3"
+  region      = "RegionOne"
+}
+
+resource "null_resource" "execute_script_on_node" {
+  count = 2
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -euxo pipefail",
+      "sudo swapoff -a",
+      "(crontab -l 2>/dev/null; echo \"@reboot /sbin/swapoff -a\") | crontab - || true",
+      "sudo apt-get update -y",
+      "sudo rm -rf /etc/apt/sources.list.d/",
+      "sudo mkdir -p /etc/apt/sources.list.d/",
+      "sudo mkdir -p  /etc/apt/keyrings/",
+      "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common",
+      "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -",
+      "sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\"",
+      "sudo apt-get update -y",
+      "sudo apt-get install -y docker-ce docker-ce-cli containerd.io",
+      "sudo usermod -aG docker $USER",
+      "sudo apt-get update -y",
+      "sudo apt-get install -y apt-transport-https ca-certificates curl gpg",
+      "curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-1-28-apt-keyring.gpg",
+      "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-1-28-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes-1.28.list",
+      "curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-1-29-apt-keyring.gpg",
+      "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-1-29-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes-1.29.list",
+      "sudo apt-get update -y",
+      "sudo apt-get install -y kubelet=\"1.29.0-1.1\" kubectl=\"1.29.0-1.1\" kubeadm=\"1.29.0-1.1\"",
+      "sudo apt-mark hold kubelet kubeadm kubectl",
+      "local_ip=\"$(ip --json addr show ens3 | jq -r '.[0].addr_info[] | select(.family == \"inet\") | .local')\"",
+      "cat > /etc/default/kubelet << EOF",
+      "KUBELET_EXTRA_ARGS=--node-ip=$local_ip",
+      "EOF"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "root"
+      private_key = file("/root/.ssh/cluster.pem.pub")
+      host        =  "192.168.10.156"
+    }
+  }
+}

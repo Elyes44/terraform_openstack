@@ -1,0 +1,44 @@
+---
+- hosts: all
+  become: yes
+
+  tasks:
+    - name: Verify SSH connectivity
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        state: started
+        timeout: 120
+
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Install Minikube dependencies
+      apt:
+        name: [conntrack, curl, wget]
+        state: present
+
+    - name: Add Kubernetes apt repository key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+
+    - name: Install kubectl
+      apt:
+        name: kubectl
+        state: present
+
+    - name: Start Minikube
+      shell: sysctl fs.protected_regular=0
+      shell: minikube start --driver=docker
